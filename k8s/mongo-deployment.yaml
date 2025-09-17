@@ -22,7 +22,7 @@ spec:
               mountPath: /data/db
       volumes:
         - name: mongo-data
-          emptyDir: {}
+          emptyDir: {}  # For persistent data, replace emptyDir with a PersistentVolumeClaim
 ---
 apiVersion: v1
 kind: Service

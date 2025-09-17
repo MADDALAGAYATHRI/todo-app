@@ -1,26 +1,74 @@
 pipeline {
-  agent any
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
+    agent any
+
+    environment {
+        DOCKER_HUB_USER = 'maddalagayathri'   // Your DockerHub username
+        BACKEND_IMAGE  = 'todo-backend'
+        FRONTEND_IMAGE = 'todo-frontend'
+        MONGO_IMAGE    = 'mongo:6.0'
+        KUBE_NAMESPACE = 'default'
     }
-    stage('Build') {
-      steps { dir('backend'){ sh 'mvn -B -DskipTests package' } }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/MADDALAGAYATHRI/todo-app.git'
+            }
+        }
+
+        stage('Build Backend with Maven') {
+            steps {
+                dir('backend') {
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    // Set Minikube Docker environment
+                    sh 'eval $(minikube -p minikube docker-env)'
+
+                    // Build backend image
+                    sh "docker build -t ${DOCKER_HUB_USER}/${BACKEND_IMAGE}:latest ./backend"
+                    
+                    // Build frontend image
+                    sh "docker build -t ${DOCKER_HUB_USER}/${FRONTEND_IMAGE}:latest ./frontend"
+                }
+            }
+        }
+
+        stage('Push Docker Images') {
+            steps {
+                script {
+                    sh "docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}"
+                    sh "docker push ${DOCKER_HUB_USER}/${BACKEND_IMAGE}:latest"
+                    sh "docker push ${DOCKER_HUB_USER}/${FRONTEND_IMAGE}:latest"
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    // Apply Kubernetes manifests
+                    sh 'kubectl apply -f k8s/mongo-deployment.yaml'
+                    sh 'kubectl apply -f k8s/backend-deployment.yaml'
+                    sh 'kubectl apply -f k8s/frontend-deployment.yaml'
+                }
+            }
+        }
     }
-    stage('Docker Build & Push') {
-      steps {
-        sh 'docker build -t your-dockerhub-username/todo-backend:latest backend'
-        sh 'docker build -t your-dockerhub-username/todo-frontend:latest frontend'
-        // Push commands (requires docker login with credentials)
-        // sh 'docker push your-dockerhub-username/todo-backend:latest'
-        // sh 'docker push your-dockerhub-username/todo-frontend:latest'
-      }
+
+    post {
+        success {
+            echo "Deployment completed successfully! 🎉"
+        }
+        failure {
+            echo "Pipeline failed. Check logs. ❌"
+        }
     }
-    stage('Deploy to K8s') {
-      steps {
-        // assumes kubectl configured on Jenkins agent
-        sh 'kubectl apply -f k8s/'
-      }
-    }
-  }
 }
