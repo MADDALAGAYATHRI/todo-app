@@ -21,7 +21,7 @@ pipeline {
         stage('Build Backend with Maven') {
             steps {
                 dir('backend') {
-                    sh 'mvn clean package -DskipTests'
+                    bat 'mvn clean package -DskipTests'
                 }
             }
         }
@@ -29,14 +29,11 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    // Set Minikube Docker environment
-                    sh 'eval $(minikube -p minikube docker-env)'
-
                     // Build backend image
-                    sh "docker build -t ${DOCKER_HUB_USER}/${BACKEND_IMAGE}:latest ./backend"
+                    bat "docker build -t %DOCKER_HUB_USER%/%BACKEND_IMAGE%:latest ./backend"
                     
                     // Build frontend image
-                    sh "docker build -t ${DOCKER_HUB_USER}/${FRONTEND_IMAGE}:latest ./frontend"
+                    bat "docker build -t %DOCKER_HUB_USER%/%FRONTEND_IMAGE%:latest ./frontend"
                 }
             }
         }
@@ -44,9 +41,11 @@ pipeline {
         stage('Push Docker Images') {
             steps {
                 script {
-                    sh "docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}"
-                    sh "docker push ${DOCKER_HUB_USER}/${BACKEND_IMAGE}:latest"
-                    sh "docker push ${DOCKER_HUB_USER}/${FRONTEND_IMAGE}:latest"
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
+                        bat "docker login -u %DOCKER_HUB_USER% -p %DOCKER_HUB_PASSWORD%"
+                        bat "docker push %DOCKER_HUB_USER%/%BACKEND_IMAGE%:latest"
+                        bat "docker push %DOCKER_HUB_USER%/%FRONTEND_IMAGE%:latest"
+                    }
                 }
             }
         }
@@ -55,9 +54,9 @@ pipeline {
             steps {
                 script {
                     // Apply Kubernetes manifests
-                    sh 'kubectl apply -f k8s/mongo-deployment.yaml'
-                    sh 'kubectl apply -f k8s/backend-deployment.yaml'
-                    sh 'kubectl apply -f k8s/frontend-deployment.yaml'
+                    bat "kubectl apply -f k8s/mongo-deployment.yaml"
+                    bat "kubectl apply -f k8s/backend-deployment.yaml"
+                    bat "kubectl apply -f k8s/frontend-deployment.yaml"
                 }
             }
         }
