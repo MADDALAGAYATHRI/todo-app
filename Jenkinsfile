@@ -2,15 +2,20 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_USER = 'maddalagayathri'   // Your DockerHub username
-        BACKEND_IMAGE  = 'todo-backend'
-        FRONTEND_IMAGE = 'todo-frontend'
-        MONGO_IMAGE    = 'mongo:6.0'
-        KUBE_NAMESPACE = 'default'
+        DOCKER_HUB_USER = credentials('dockerhub-username')   // Jenkins credentials ID
+        DOCKER_HUB_PASS = credentials('dockerhub-password')   // Jenkins credentials ID
+        BACKEND_IMAGE  = "todo-backend"
+        FRONTEND_IMAGE = "todo-frontend"
+        MONGO_IMAGE    = "mongo:6.0"
+        KUBE_NAMESPACE = "default"
+    }
+
+    tools {
+        jdk "jdk17"   // Name you configured in Jenkins Global Tool Configuration
+        maven "Maven3" // Assuming you installed Maven in Jenkins tools
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -18,17 +23,19 @@ pipeline {
             }
         }
 
-        stage('Check Java & Maven') {
-            steps {
-                bat 'java -version'
-                bat 'mvn -v'
-            }
-        }
-
         stage('Build Backend with Maven') {
             steps {
                 dir('backend') {
-                    bat 'mvn clean package -DskipTests'
+                    bat "mvn clean package -DskipTests"
+                }
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                dir('frontend') {
+                    bat "npm install"
+                    bat "npm run build"
                 }
             }
         }
@@ -36,11 +43,8 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    // Build backend image
-                    bat "docker build -t %DOCKER_HUB_USER%/%BACKEND_IMAGE%:latest ./backend"
-                    
-                    // Build frontend image
-                    bat "docker build -t %DOCKER_HUB_USER%/%FRONTEND_IMAGE%:latest ./frontend"
+                    bat "docker build -t %DOCKER_HUB_USER%/${BACKEND_IMAGE}:latest ./backend"
+                    bat "docker build -t %DOCKER_HUB_USER%/${FRONTEND_IMAGE}:latest ./frontend"
                 }
             }
         }
@@ -48,33 +52,26 @@ pipeline {
         stage('Push Docker Images') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
-                        bat "docker login -u %DOCKER_HUB_USER% -p %DOCKER_HUB_PASSWORD%"
-                        bat "docker push %DOCKER_HUB_USER%/%BACKEND_IMAGE%:latest"
-                        bat "docker push %DOCKER_HUB_USER%/%FRONTEND_IMAGE%:latest"
-                    }
+                    bat "docker login -u %DOCKER_HUB_USER% -p %DOCKER_HUB_PASS%"
+                    bat "docker push %DOCKER_HUB_USER%/${BACKEND_IMAGE}:latest"
+                    bat "docker push %DOCKER_HUB_USER%/${FRONTEND_IMAGE}:latest"
                 }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    // Apply Kubernetes manifests
-                    bat "kubectl apply -f k8s/mongo-deployment.yaml"
-                    bat "kubectl apply -f k8s/backend-deployment.yaml"
-                    bat "kubectl apply -f k8s/frontend-deployment.yaml"
-                }
+                bat "kubectl apply -f k8s/"
             }
         }
     }
 
     post {
-        success {
-            echo "Deployment completed successfully! 🎉"
-        }
         failure {
-            echo "Pipeline failed. Check logs. ❌"
+            echo "Pipeline failed. ❌"
+        }
+        success {
+            echo "Pipeline succeeded. ✅"
         }
     }
 }
