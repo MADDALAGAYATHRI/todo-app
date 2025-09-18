@@ -18,6 +18,13 @@ pipeline {
             }
         }
 
+        stage('Check Java & Maven') {
+            steps {
+                bat 'java -version'
+                bat 'mvn -v'
+            }
+        }
+
         stage('Build Backend with Maven') {
             steps {
                 dir('backend') {
